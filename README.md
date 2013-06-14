@@ -10,7 +10,7 @@ This library is considered experimental and the API may change without notice. P
 
 ## Installation
 
-Clone the repo and ensure the contents of `lib` are in your `lua_package_path` in `nginx.conf`.
+Copy the `rack.lua` file inside your nginx's `lib` folder and make sure it is included in the `lua_package_path` variable in `nginx.conf`.
 
 ## Using Middleware
 
@@ -29,73 +29,78 @@ server {
 }
 ```
 
-### rack.use(...)
+### `rack.use(middleware, options)`
 
 **Syntax:** `rack.use(middleware, options?)`
 
-For simple cases, the `middleware` parameter can also be a simple function rather than a Lua module. Your function should accept `req`, `res`, and `next` as parameters. See below for instructions on writing middleware.
+The `middleware` parameter must be a callable object (like a function).
+The function should accept `req`, `res`, and `options` as parameters.
+See below for instructions on writing middleware.
 
 ```lua
-rack.use(function(req, res, next)
-    res.header["X-Homer"] = "Doh!"
-    next()
+rack.use(function(req, res)
+  res.header["X-Homer"] = "Doh!"
 end)
 ```
 
-### rack.run()
+It's possible to chain more than one middleware by calling `rack.use` several times.
 
-**Syntax:** `rack.run()`
 
-Runs each of the middleware in order, until one chooses to handle the response. Thus, the order in which you call `rack.use()` is important.
+### `rack.run()`
+
+Runs each of the middlewares in order, until the list is finished or one of the middlewares stops the pipeline (see below).
+
+Middlewares will be executed in the same order as they were included by `rack.use()`.
+
+Each middleware can make modifications to `req` and `res`, and the next middleware will receive them. The `options` parameter
+is optional and will be the same one provided in `rack.use`.
+
+The middleware pipeline can be halted by any middleware who whishes to do so, by returning `false`. At that moment, nginx will
+just use the current contents of `res` as the final result.
+
+Note that `res.status` is mandatory. Attempting to halt the pipeline without setting it will result in an error. If `res.status`
+is "valid" (for example, 200), then `res.body` must be set to a non-empty string.
 
 ## Creating Middleware
 
-Middleware applications are simply Lua modules which use the HTTP request and response as a minimal interface. They must implement the function `call(options)` which returns a function. The parameters `(req, res, next)` are defined below.
+Middleware applications are simply Lua functions (or callable objects).
 
 ```lua
 -- /lib/method_override.lua
 
-local method_override = {
-  _VERSION = '0.01',
-  call     = function(options)
-    return function(req, res, next_middleware)
-      local key = options['key'] or '_method'
-      req.method = string.upper(req.args[key] or req.method)
-      next_middleware()
-    end
-  end
-}
-
-return method_override
+return function(req, res, options)
+  local key = options['key'] or '_method'
+  req.method = string.upper(req.args[key] or req.method)
+end
 ```
 
 ## API
 
-### req.method
+### `req.method`
 
 The HTTP method, e.g. `GET`, set from `ngx.var.request_method`.
 
-### req.scheme
+### `req.scheme`
 
 The protocol scheme `http|https`, set from `ngx.var.scheme`.
 
-### req.uri
+### `req.uri`
 
 e.g. `/my/uri`, set from `ngx.var.uri`.
 
-### req.host
+### `req.host`
 
 The hostname, e.g. `example.com`, set from `ngx.var.host`.
 
-### req.query
+### `req.query`
 
 The querystring, e.g. `var1=1&var2=2`, set from `ngx.var.query_string`.
 
-### req.args
+### `req.args`
 
 The query args, as a `table`, set from `ngx.req.get_uri_args()`.
 
-### req.header
+### `req.header`
 
 A table containing the request headers. Keys are matched case insensitvely, and optionally with underscores instead of hyphens. e.g.
 
@@ -104,47 +109,21 @@ req.header["X-Foo"] = "bar"
 res.body = req.header.x_foo --> "bar"
 ```
 
-### req.body
+### `req.body`
 
-An empty string until read with the `read_body` middleware.
+The request body.
 
-### res.status
+### `res.status`
 
 The HTTP status code to return. There are [constants defined](http://wiki.nginx.org/HttpLuaModule#HTTP_status_constants) for common statuses.
 
-### res.header
+### `res.header`
 
 A table of response headers, which can be matched case insensitively and optionally with underscores instead of hyphens (see `req.header` above).
 
-### res.body
+### `res.body`
 
 The response body.
-
-### next_middleware
-
-This parameter is a function provided to the middleware, which may be called to indicate rack should try the next middleware. If your application does not intend to send the response to the browser, it must call this function. If however your application is taking responsibility for the response, simply return without calling next.
-
-*Example purely modifying the request.*
-```lua
-  call = function(options)
-    return function(req, res, next_middleware)
-      local key = options['key'] or '_method'
-      req.method = string.upper(req.args[key] or req.method)
-      next_middleware()
-    end
-  end
-```
-
-*Example generating a response.*
-```lua
-  call = function(options)
-    return function(req, res)
-      res.status = 200
-      res.header['Content-Type'] = "text/plain"
-      res.body = "Hello World"
-    end
-  end
-```
 
 ### Enhancing req / res
 
@@ -152,15 +131,17 @@ Your application can add new fields or even functions to the req / res tables wh
 
 ## Authors
 
-James Hurst <james - AT - pintsized.co.uk>
-Raimon Grau <raimonster - AT - gmail.com>
-Enrique García <kikito - AT - gmail.com>
+James Hurst (james@pintsized.co.uk)
+Raimon Grau (raimonster@gmail.com)
+Enrique García (kikito@gmail.com)
 
 ## Licence
 
 This module is licensed under the 2-clause BSD license.
 
-Copyright (c) 2012, James Hurst <james@pintsized.co.uk>
+Copyright (c) 2012, James Hurst (james@pintsized.co.uk)
+Copyright (c) 2013, Raimon Grau (raimonster@gmail.com)
+Copyright (c) 2013, Enrique García (kikito@gmail.com)
 
 All rights reserved.
 
