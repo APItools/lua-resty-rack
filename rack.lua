@@ -2,19 +2,6 @@ local rack = {}
 
 rack._VERSION = '0.1'
 
-local function process_rack_use_args(args)
-  local route = table.remove(args, 1)
-  local mw, options
-  if type(route) == "table" or type(route) == "function" then
-    mw = route
-    route = nil
-  else
-    mw = table.remove(args, 1)
-  end
-  options = table.remove(args, 1) or {}
-  return route, mw, options
-end
-
 local function get_ngx_middlewares()
   ngx.ctx.rack             = ngx.ctx.rack or {}
   ngx.ctx.rack.middlewares = ngx.ctx.rack.middlewares or {}
@@ -108,12 +95,8 @@ end
 -- @param   table   middleware  The middleware module
 -- @param   table   options     Table of options for the middleware.
 -- @return  void
-function rack.use(...)
-  local route, mw, options = process_rack_use_args({...})
-
-  if route and string.sub(ngx.var.uri, 1, route:len()) ~= route then return false end
-
-  local mwf = get_middleware_function(mw, options)
+function rack.use(middleware, options)
+  local mwf = get_middleware_function(middleware, options)
   if not mwf then return nil, "Invalid middleware" end
 
   local middlewares = get_ngx_middlewares()

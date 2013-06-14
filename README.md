@@ -18,26 +18,20 @@ To install middleware for a given `location`, you simply call `rack.use(middlewa
 
 ```nginx
 server {
-    location / {
-        content_by_lua '
-            local rack = require "rack"
+  location / {
+    content_by_lua '
+      local rack = require "rack"
 
-            rack.use(require "my.module")
-            rack.run()
-        ';
-    }
+      rack.use(require "my.module")
+      rack.run()
+    ';
+  }
 }
 ```
 
 ### rack.use(...)
 
-**Syntax:** `rack.use(route?, middleware, options?)`
-
-If `route` is supplied, the middleware will only be run for requests where `route` is in the path (`ngx.var.uri`). If the middleware requires any options to be selected they can be provided, usually as a table, as the third parameter.
-
-```lua
-rack.use('/some/path', app, { foo = 'bar' })
-```
+**Syntax:** `rack.use(middleware, options?)`
 
 For simple cases, the `middleware` parameter can also be a simple function rather than a Lua module. Your function should accept `req`, `res`, and `next` as parameters. See below for instructions on writing middleware.
 
