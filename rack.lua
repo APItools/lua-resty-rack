@@ -2,11 +2,15 @@ local rack = {}
 
 rack._VERSION = '0.1'
 
-local function handle_ngx_response_errors(status, body)
-  if not status then
-    ngx.log(ngx.ERR, "Middleware returned with no status. Ensure that you set res.status to something in one of your middlewares.")
+local function rack_assert(condition, message)
+  if not condition then
+    ngx.log(ngx.ERR, message)
     ngx.exit(500)
   end
+end
+
+local function handle_ngx_response_errors(status, body)
+  rack_assert(status, "Rack returned with no status. Ensure that you set res.status to something in at least one of your middlewares.")
 
   -- If we have a 5xx or a 3/4xx and no body entity, exit allowing nginx config
   -- to generate a response.
@@ -69,11 +73,7 @@ local middlewares = {}
 ----------------- PUBLIC INTERFACE ----------------------
 
 function rack.use(middleware, options)
-  if not middleware then
-    ngx.log(ngx.ERR, "Invalid middleware")
-    ngx.exit(500)
-  end
-
+  rack_assert(middleware, "Invalid middleware")
   middlewares[#middlewares + 1] = {middleware = middleware, options = options}
 end
 
