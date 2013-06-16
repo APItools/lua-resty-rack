@@ -22,29 +22,43 @@ server {
     content_by_lua '
       local rack = require "rack"
 
-      rack.use(require "my.module")
+      rack.use(require "my.middleware")
       rack.run()
     ';
   }
 }
 ```
 
-### `rack.use(middleware, options)`
+### `rack.use(middleware, ...)`
 
-**Syntax:** `rack.use(middleware, options?)`
+The `middleware` parameter must be a callable object (usually a Lua function).
 
-The `middleware` parameter must be a callable object (like a function).
-The function should accept `req`, `res`, and `options` as parameters.
-See below for instructions on writing middleware.
+The function should accept at least two params:`req` and `res`.
 
 ```lua
 rack.use(function(req, res)
   res.header["X-Homer"] = "Doh!"
 end)
 ```
+Any extra arguments passed to `rack.use` will be passed to the middleware after `req` and `res`.
+
+```lua
+local body_replacer = function(req,res,from,to)
+  res.body = res.body:gsub(from, to)
+end
+
+rack.use(function(req, res)
+  res.status = 200
+  res.body   = "I like Chocolate"
+end)
+
+rack.use(body_replacer, "Chocolate", "Vanilla")
+```
 
 It's possible to chain more than one middleware by calling `rack.use` several times.
-
+The middlewares will be executed in the same order they are included by `rack.use`. They can
+modify `req` and `res` by changing their properties or adding new ones. It is required that
+at least `res.status` is set by some middleware.
 
 ### `rack.run()`
 
@@ -61,20 +75,28 @@ just use the current contents of `res` as the final result.
 Note that `res.status` is mandatory. Attempting to halt the pipeline without setting it will result in an error. If `res.status`
 is "valid" (for example, 200), then `res.body` must be set to a non-empty string.
 
-## Creating Middleware
+## `res` attributes
 
-Middleware applications are simply Lua functions (or callable objects).
+### `res.status`
+
+The HTTP status code to return.
+There are [constants defined](http://wiki.nginx.org/HttpLuaModule#HTTP_status_constants) for common statuses.
+This value *must* be set by at least one middleware, otherwise the execution of `rack.run` will result in an error.
+
+### `res.header`
+
+A table containing the request headers. Keys are matched case insensitvely, and optionally with underscores instead of hyphens. e.g.
 
 ```lua
--- /lib/method_override.lua
-
-return function(req, res, options)
-  local key = options['key'] or '_method'
-  req.method = string.upper(req.args[key] or req.method)
-end
+req.header["X-Foo"] = "bar"
+res.body = req.header.x_foo --> "bar"
 ```
 
-## API
+### `res.body`
+
+The response body. It's initially empty, and will be returned by nginx as response after the last middleware in the chain has been executed.
+
+## `req` attributes
 
 ### `req.method`
 
@@ -102,33 +124,12 @@ The query args, as a `table`, set from `ngx.req.get_uri_args()`.
 
 ### `req.header`
 
-A table containing the request headers. Keys are matched case insensitvely, and optionally with underscores instead of hyphens. e.g.
-
-```lua
-req.header["X-Foo"] = "bar"
-res.body = req.header.x_foo --> "bar"
-```
+A table of headers. Just like in `res.header`, keys are normalized before being matched.
 
 ### `req.body`
 
 The request body. It's loaded automatically (via metatables) the first time it's requested, since it's an expensive operation. Then it is
 cached. It can also be set to anything else by any middleware.
-
-### `res.status`
-
-The HTTP status code to return. There are [constants defined](http://wiki.nginx.org/HttpLuaModule#HTTP_status_constants) for common statuses.
-
-### `res.header`
-
-A table of response headers, which can be matched case insensitively and optionally with underscores instead of hyphens (see `req.header` above).
-
-### `res.body`
-
-The response body.
-
-### Enhancing req / res
-
-Your application can add new fields or even functions to the req / res tables where appropriate, which could be used by other middleware so long as the dependencies are clear (and one calls `use()` in the correct order).
 
 ## Authors
 
