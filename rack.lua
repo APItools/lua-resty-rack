@@ -85,9 +85,9 @@ local middlewares = {}
 
 ----------------- PUBLIC INTERFACE ----------------------
 
-function rack.use(middleware, options)
+function rack.use(middleware, ...)
   rack_assert(middleware, "Invalid middleware")
-  middlewares[#middlewares + 1] = {middleware = middleware, options = options}
+  middlewares[#middlewares + 1] = { middleware = middleware, args = {...} }
 end
 
 function rack.run()
@@ -97,11 +97,11 @@ function rack.run()
     status  = nil,
     header  = setmetatable({}, create_normalizer_mt())
   }
-  local mw, options
+  local mw, args
 
   for i=1, #middlewares do
-    mw, options = middlewares[i].middleware, middlewares[i].options
-    if mw(req, res, options) == false then break end
+    mw, args = middlewares[i].middleware, middlewares[i].args
+    if mw(req, res, unpack(args)) == false then break end
   end
 
   if not ngx.headers_sent then

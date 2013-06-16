@@ -1,7 +1,7 @@
 use Test::Nginx::Socket;
 use Cwd qw(cwd);
 
-plan tests => 8;
+plan tests => 10;
 
 my $pwd = cwd();
 
@@ -104,5 +104,32 @@ location /t {
 GET /t
 --- error_code: 200
 --- response_body: Hello
+
+=== TEST 6: Middleware arguments
+--- http_config eval: $::HttpConfig
+--- config
+location /t {
+    content_by_lua '
+        local rack = require "rack"
+
+        local replacer = function(req, res, from, to)
+          res.body = (res.body or ""):gsub(from, to)
+        end
+
+        rack.use(function(req, res)
+          res.status = 200
+          res.body = "Hello World"
+        end)
+
+        rack.use(replacer, "Hello", "Bye")
+
+        rack.run()
+    ';
+}
+--- request
+GET /t
+--- error_code: 200
+--- response_body: Bye World
+
 
 
