@@ -1,7 +1,7 @@
 use Test::Nginx::Socket;
 use Cwd qw(cwd);
 
-plan tests => 6;
+plan tests => 8;
 
 my $pwd = cwd();
 
@@ -23,7 +23,7 @@ location /t {
 }
 --- request
 GET /t
---- error_code: 200
+--- error_code: 500
 
 === TEST 2: Simple response as a function
 --- http_config eval: $::HttpConfig
@@ -59,25 +59,50 @@ location /t {
 GET /t
 --- error_code: 304
 
-=== TEST 4: Module
+=== TEST 4: Middleware chaining
 --- http_config eval: $::HttpConfig
 --- config
 location /t {
     content_by_lua '
         local rack = require "rack"
-        local m = {
-            call = function(o)
-                return function(req, res, next)
-                    res.status = 200
-                    res.body = "Module"
-                end
-            end
-        }
-        rack.use(m)
+
+        rack.use(function(req, res)
+            res.status = 200
+        end)
+        rack.use(function(req, res)
+            res.body = "Hello"
+        end)
+
         rack.run()
     ';
 }
 --- request
 GET /t
 --- error_code: 200
---- response_body: Module
+--- response_body: Hello
+
+=== TEST 5: Interruption
+--- http_config eval: $::HttpConfig
+--- config
+location /t {
+    content_by_lua '
+        local rack = require "rack"
+
+        rack.use(function(req, res)
+            res.status = 200
+            res.body = "Hello"
+            return false
+        end)
+        rack.use(function(req, res)
+            res.body = "Goodbye"
+        end)
+
+        rack.run()
+    ';
+}
+--- request
+GET /t
+--- error_code: 200
+--- response_body: Hello
+
+

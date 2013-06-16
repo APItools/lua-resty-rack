@@ -2,32 +2,11 @@ local rack = {}
 
 rack._VERSION = '0.1'
 
-local function get_ngx_middlewares()
-  ngx.ctx.rack             = ngx.ctx.rack or {}
-  ngx.ctx.rack.middlewares = ngx.ctx.rack.middlewares or {}
-  return ngx.ctx.rack.middlewares
-end
-
--- uri_relative = /test?arg=true
-function get_ngx_uri_relative(query)
-  return ngx.var.uri .. ngx.var.is_args .. query
-end
-
--- uri_full = http://example.com/test?arg=true
-function get_ngx_uri_full(uri_relative)
-  return ngx.var.scheme .. '://' .. ngx.var.host .. uri_relative
-end
-
-local function get_middleware_function(mw, options)
-  -- If we simply have a function, we can add that instead
-  if type(mw) == "function" then return mw end
-  -- If we have a 'call' function, then calling it with options should return a new function with the required params
-  if type(mw) == "table" and type(mw.call) == "function" then return mw.call(options) end
-  return nil
-end
-
 local function handle_ngx_response_errors(status, body)
-  assert(status, "Middleware returned with no status. Perhaps you need to call next().")
+  if not status then
+    ngx.log(ngx.ERR, "Middleware returned with no status. Ensure that you set res.status to something in one of your middlewares.")
+    ngx.exit(500)
+  end
 
   -- If we have a 5xx or a 3/4xx and no body entity, exit allowing nginx config
   -- to generate a response.
@@ -61,17 +40,56 @@ local function create_normalizer_mt(fallback)
   }
 end
 
--- Runs the next middleware in the rack.
-local function next_middleware()
-  -- Pick each piece of middleware off in order
-  local mwf = table.remove(ngx.ctx.rack.middlewares, 1)
+-- Fallback for the request's header, to be used on its normalizer mt
+local req_fallback  = function(k) return ngx.var["http_" .. k] end
 
-  local req = ngx.ctx.rack.req
-  local res = ngx.ctx.rack.res
+local function create_initial_request()
+  local query         = ngx.var.query_string or ""
+  -- uri_relative = /test?arg=true
+  local uri_relative  = ngx.var.uri .. ngx.var.is_args .. query
+  -- uri_full = http://example.com/test?arg=true
+  local uri_full      = ngx.var.scheme .. '://' .. ngx.var.host .. uri_relative
 
-  -- Call the middleware, which may itself call next().
-  -- The first to return is handling the reponse.
-  local post_function = mwf(req, res, next_middleware)
+  return {
+    body          = "", -- FIXME read request body on demmand
+    query         = query,
+    uri_full      = uri_full,
+    uri_relative  = uri_relative,
+    method        = ngx.var.request_method,
+    scheme        = ngx.var.scheme,
+    uri           = ngx.var.uri,
+    host          = ngx.var.host,
+    args          = ngx.req.get_uri_args(),
+    header        = setmetatable({}, create_normalizer_mt(req_fallback))
+  }
+end
+
+local middlewares = {}
+
+----------------- PUBLIC INTERFACE ----------------------
+
+function rack.use(middleware, options)
+  if not middleware then
+    ngx.log(ngx.ERR, "Invalid middleware")
+    ngx.exit(500)
+  end
+
+  middlewares[#middlewares + 1] = {middleware = middleware, options = options}
+end
+
+function rack.run()
+  local req = create_initial_request()
+  local res = {
+    body    = nil,
+    status  = nil,
+    header  = setmetatable({}, create_normalizer_mt())
+  }
+  local mw, options
+
+  for i=1, #middlewares do
+    mw, options = middlewares[i].middleware, middlewares[i].options
+    if mw(req, res, options) == false then break end
+  end
 
   if not ngx.headers_sent then
     handle_ngx_response_errors(res.status, res.body)
@@ -81,67 +99,6 @@ local function next_middleware()
     ngx.print(res.body)
     ngx.eof()
   end
-
-  -- Middleware may return a callable object to be called post-EOF.
-  -- This code will only run for persistent connections, and is not really guaranteed
-  -- to run, since browser behaviours differ. Also be aware that long running tasks
-  -- may affect performance by hogging the connection.
-  if post_function then post_function(req, res) end
 end
-
--- Register some middleware to be used.
---
--- @param   string  route       Optional, dfaults to '/'.
--- @param   table   middleware  The middleware module
--- @param   table   options     Table of options for the middleware.
--- @return  void
-function rack.use(middleware, options)
-  local mwf = get_middleware_function(middleware, options)
-  if not mwf then return nil, "Invalid middleware" end
-
-  local middlewares = get_ngx_middlewares()
-  table.insert(middlewares, mwf)
-  return true
-end
-
--- Start the rack.
-function rack.run()
-  -- We need a decent req / res environment to pass around middleware.
-  if not ngx.ctx.rack or not ngx.ctx.rack.middlewares then
-    ngx.log(ngx.ERR, "Attempted to run rack without any middleware.")
-    return
-  end
-
-  local query         = ngx.var.query_string or ""
-  local uri_relative  = get_ngx_uri_relative(query)
-  local uri_full      = get_ngx_uri_full(uri_relative)
-  local req_fallback  = function(k) return ngx.var["http_" .. k] end
-
-  ngx.ctx.rack.req = {
-    body          = "",
-    query         = query,
-    uri_full      = uri_full,
-    uri_relative  = uri_relative,
-    method        = ngx.var.request_method,
-    args          = ngx.req.get_uri_args(),
-    scheme        = ngx.var.scheme,
-    uri           = ngx.var.uri,
-    host          = ngx.var.host,
-    header        = setmetatable({}, create_normalizer_mt(req_fallback))
-  }
-
-  ngx.ctx.rack.res = {
-    status  = nil,
-    body    = nil,
-    header  = setmetatable({}, create_normalizer_mt())
-  }
-
-  next_middleware()
-end
-
--- to prevent use of casual module global variables
-setmetatable(rack, { __newindex = function (table, key, val)
-  error('attempt to write to undeclared variable "' .. key .. '": ' .. debug.traceback())
-end})
 
 return rack
