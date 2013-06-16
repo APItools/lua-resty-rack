@@ -81,6 +81,14 @@ local function create_initial_request()
   }, create_bodybuilder_mt())
 end
 
+local function create_initial_response()
+  return {
+    body    = nil,
+    status  = nil,
+    header  = setmetatable({}, create_normalizer_mt())
+  }
+end
+
 local middlewares = {}
 
 ----------------- PUBLIC INTERFACE ----------------------
@@ -92,13 +100,9 @@ end
 
 function rack.run()
   local req = create_initial_request()
-  local res = {
-    body    = nil,
-    status  = nil,
-    header  = setmetatable({}, create_normalizer_mt())
-  }
-  local mw, args
+  local res = create_initial_response()
 
+  local mw, args
   for i=1, #middlewares do
     mw, args = middlewares[i].middleware, middlewares[i].args
     if mw(req, res, unpack(args)) == false then break end
