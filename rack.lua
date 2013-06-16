@@ -47,6 +47,19 @@ end
 -- Fallback for the request's header, to be used on its normalizer mt
 local req_fallback  = function(k) return ngx.var["http_" .. k] end
 
+local function create_bodybuilder_mt()
+  return {
+    __index = function(t, k)
+      if k == 'body' then
+        ngx.req.read_body()
+        local body = ngx.req.get_body_data()
+        rawset(t, 'body', body)
+        return body
+      end
+    end
+  }
+end
+
 local function create_initial_request()
   local query         = ngx.var.query_string or ""
   -- uri_relative = /test?arg=true
@@ -54,8 +67,8 @@ local function create_initial_request()
   -- uri_full = http://example.com/test?arg=true
   local uri_full      = ngx.var.scheme .. '://' .. ngx.var.host .. uri_relative
 
-  return {
-    body          = "", -- FIXME read request body on demmand
+  return setmetatable({
+  --body = (provided by the bodybuilder metatable)
     query         = query,
     uri_full      = uri_full,
     uri_relative  = uri_relative,
@@ -65,7 +78,7 @@ local function create_initial_request()
     host          = ngx.var.host,
     args          = ngx.req.get_uri_args(),
     header        = setmetatable({}, create_normalizer_mt(req_fallback))
-  }
+  }, create_bodybuilder_mt())
 end
 
 local middlewares = {}

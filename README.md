@@ -111,7 +111,8 @@ res.body = req.header.x_foo --> "bar"
 
 ### `req.body`
 
-The request body.
+The request body. It's loaded automatically (via metatables) the first time it's requested, since it's an expensive operation. Then it is
+cached. It can also be set to anything else by any middleware.
 
 ### `res.status`
 
