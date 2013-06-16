@@ -9,7 +9,7 @@ local function rack_assert(condition, message)
   end
 end
 
-local function handle_ngx_response_errors(status, body)
+local function check_response(status, body)
   rack_assert(status, "Rack returned with no status. Ensure that you set res.status to something in at least one of your middlewares.")
 
   -- If we have a 5xx or a 3/4xx and no body entity, exit allowing nginx config
@@ -47,6 +47,8 @@ end
 -- Fallback for the request's header, to be used on its normalizer mt
 local req_fallback  = function(k) return ngx.var["http_" .. k] end
 
+-- This metatable will fill the request body with its value the first time
+-- req.body is invoked. After that, it will be cached.
 local function create_bodybuilder_mt()
   return {
     __index = function(t, k)
@@ -68,7 +70,7 @@ local function create_initial_request()
   local uri_full      = ngx.var.scheme .. '://' .. ngx.var.host .. uri_relative
 
   return setmetatable({
-  --body = (provided by the bodybuilder metatable)
+  --body = (provided by the bodybuilder metatable below)
     query         = query,
     uri_full      = uri_full,
     uri_relative  = uri_relative,
@@ -109,7 +111,7 @@ function rack.run()
   end
 
   if not ngx.headers_sent then
-    handle_ngx_response_errors(res.status, res.body)
+    check_response(res.status, res.body)
 
     for k,v in pairs(res.header) do ngx.header[k] = v end
     ngx.status = res.status
