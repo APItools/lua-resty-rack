@@ -1,4 +1,4 @@
-OPENRESTY_PREFIX=/usr/local/openresty-debug
+OPENRESTY_PREFIX=/usr/local/openresty
 
 PREFIX ?=          /usr/local
 LUA_INCLUDE_DIR ?= $(PREFIX)/include
@@ -15,5 +15,5 @@ install: all
 		$(INSTALL) lib/resty/rack/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/resty/rack
 
 test: all
-		PATH=$(OPENRESTY_PREFIX)/nginx/sbin:$$PATH prove -I../test-nginx/lib -r t
+		PATH=$(OPENRESTY_PREFIX)/nginx/sbin:$$PATH prove -r t
 

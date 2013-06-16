@@ -1,6 +1,6 @@
 local rack = {}
 
-rack._VERSION = '0.1'
+rack._VERSION = '0.2'
 
 local function rack_assert(condition, message)
   if not condition then
