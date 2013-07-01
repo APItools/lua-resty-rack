@@ -23,6 +23,12 @@ local function normalize(str)
   return str:lower():gsub("-", "_")
 end
 
+local function copy(src, dest)
+  dest = dest or {}
+  for k,v in pairs(src) do dest[k] = v end
+  return dest
+end
+
 -- creates a metatable that, when applied to a table, makes it normalized, which means:
 -- * It lowercases keys, so t.foo and t.FOO return the same
 -- * It replaces dashes by underscores, so t['foo-bar'] returns the same as t.foo_bar
@@ -69,17 +75,20 @@ local function create_initial_request()
   -- uri_full = http://example.com/test?arg=true
   local uri_full      = ngx.var.scheme .. '://' .. ngx.var.host .. uri_relative
 
+  local header       = copy(ngx.req.get_headers())
+  setmetatable(header, create_normalizer_mt(req_fallback))
+
   return setmetatable({
   --body = (provided by the bodybuilder metatable below)
     query         = query,
     uri_full      = uri_full,
     uri_relative  = uri_relative,
+    header        = header,
     method        = ngx.var.request_method,
     scheme        = ngx.var.scheme,
     uri           = ngx.var.uri,
     host          = ngx.var.host,
-    args          = ngx.req.get_uri_args(),
-    header        = setmetatable({}, create_normalizer_mt(req_fallback))
+    args          = ngx.req.get_uri_args()
   }, create_bodybuilder_mt())
 end
 
@@ -113,7 +122,7 @@ function rack.run()
   if not ngx.headers_sent then
     check_response(res.status, res.body)
 
-    for k,v in pairs(res.header) do ngx.header[k] = v end
+    copy(res.header, ngx.header)
     ngx.status = res.status
     ngx.print(res.body)
     ngx.eof()
