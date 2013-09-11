@@ -18,7 +18,7 @@ __DATA__
 location /t {
     content_by_lua '
         local rack = require "rack"
-        rack.run()
+        rack.respond(rack.run())
     ';
 }
 --- request
@@ -35,7 +35,7 @@ location /t {
             res.status = 200
             res.body = "Hello"
         end)
-        rack.run()
+        rack.respond(rack.run())
     ';
 }
 --- request
@@ -52,7 +52,7 @@ location /t {
         rack.use(function(req, res)
             res.status = 304
         end)
-        rack.run()
+        rack.respond(rack.run())
     ';
 }
 --- request
@@ -73,7 +73,7 @@ location /t {
             res.body = "Hello"
         end)
 
-        rack.run()
+        rack.respond(rack.run())
     ';
 }
 --- request
@@ -97,7 +97,7 @@ location /t {
             res.body = "Goodbye"
         end)
 
-        rack.run()
+        rack.respond(rack.run())
     ';
 }
 --- request
@@ -123,7 +123,7 @@ location /t {
 
         rack.use(replacer, "Hello", "Bye")
 
-        rack.run()
+        rack.respond(rack.run())
     ';
 }
 --- request

@@ -23,7 +23,8 @@ server {
       local rack = require "rack"
 
       rack.use(require "my.middleware")
-      rack.run()
+      local response = rack.run()
+      rack.respond(response)
     ';
   }
 }
@@ -60,7 +61,7 @@ The middlewares will be executed in the same order they are included by `rack.us
 modify `req` and `res` by changing their properties or adding new ones. It is required that
 at least `res.status` is set by some middleware.
 
-### `rack.run()`
+### `local response = rack.run()`
 
 Runs each of the middlewares in order, until the list is finished or one of the middlewares stops the pipeline (see below).
 
@@ -130,6 +131,28 @@ A table of headers. Just like in `res.header`, keys are normalized before being 
 
 The request body. It's loaded automatically (via metatables) the first time it's requested, since it's an expensive operation. Then it is
 cached. It can also be set to anything else by any middleware.
+
+## `rack.respond(response)`
+
+Sends the response to the server. Usually `response` was returned by `rack.run`.
+
+`rack.run` and `rack.respond` are separated so that further actions can be done in
+the server after running the middlewares but before sending the response back (for
+example, handling errors or storing the final response on a database). If no such
+treatment is needed, the following one-liner can be used:
+
+    rack.respond(rack.run())
+
+## Tests
+
+In order to execute the tests, run the following command:
+
+    make
+
+The tests assume that you have PERL and openresty installed.
+
+You might need to edit the Makefile to point it to your openresty folder.
+
 
 ## Authors
 

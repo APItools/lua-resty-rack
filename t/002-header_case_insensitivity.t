@@ -31,7 +31,7 @@ location /t {
             }
             res.body = cjson.encode(r)
         end)
-        rack.run()
+        rack.respond(rack.run())
     ';
 }
 --- more_headers
@@ -60,7 +60,7 @@ location /t {
             }
             res.body = cjson.encode(r)
         end)
-        rack.run()
+        rack.respond(rack.run())
     ';
 }
 --- request
@@ -87,7 +87,7 @@ location /t {
             }
             res.body = cjson.encode(r)
         end)
-        rack.run()
+        rack.respond(rack.run())
     ';
 }
 --- request
@@ -106,7 +106,7 @@ location /t {
             res.header["X-Foo"] = "bar"
             res.header["X-Foo"] = "bars"
         end)
-        rack.run()
+        rack.respond(rack.run())
     ';
 }
 --- request

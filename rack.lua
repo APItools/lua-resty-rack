@@ -119,6 +119,10 @@ function rack.run()
     if mw(req, res, unpack(args)) == false then break end
   end
 
+  return res
+end
+
+function rack.respond(res)
   if not ngx.headers_sent then
     check_response(res.status, res.body)
 
@@ -127,6 +131,10 @@ function rack.run()
     ngx.print(res.body)
     ngx.eof()
   end
+end
+
+function rack.reset()
+  middlewares = {}
 end
 
 return rack
