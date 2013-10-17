@@ -34,23 +34,31 @@ server {
 
 The `middleware` parameter must be a callable object (usually a Lua function).
 
-The function should accept at least two params:`req` and `res`.
+The function should accept at least two params:`req` and `next_middleware`. `req` is the request object (see below). `next_middleware`, when executed, will invoke the next middleware in the pipeline and
+will return a `res` (response) object.
+
+All middleware functions should at least return a response. It is recommended to use `res`.
 
 ```lua
-rack.use(function(req, res)
-  res.header["X-Homer"] = "Doh!"
+rack.use(function(req, next_middleware)
+  res.headers["X-Homer"] = "D'oh!"
+  return next_middleware()
 end)
 ```
 Any extra arguments passed to `rack.use` will be passed to the middleware after `req` and `res`.
 
 ```lua
-local body_replacer = function(req,res,from,to)
+local replacer_mw = function(req,next_middleare,from,to)
+  local res = next_middleware()
   res.body = res.body:gsub(from, to)
+  return res
 end
 
-rack.use(function(req, res)
+rack.use(function(req, next_middleware)
+  local res = next_middleware()
   res.status = 200
   res.body   = "I like Chocolate"
+  return res
 end)
 
 rack.use(body_replacer, "Chocolate", "Vanilla")
@@ -67,11 +75,10 @@ Runs each of the middlewares in order, until the list is finished or one of the 
 
 Middlewares will be executed in the same order as they were included by `rack.use()`.
 
-Each middleware can make modifications to `req` and `res`, and the next middleware will receive them. The `options` parameter
-is optional and will be the same one provided in `rack.use`.
+Each middleware can make modifications to `req` and `res`, and the next middleware will receive them (`res` must be returned).
+The rest of parameters are optional and will be the same ones provided in `rack.use`.
 
-The middleware pipeline can be halted by any middleware who whishes to do so, by returning `false`. At that moment, nginx will
-just use the current contents of `res` as the final result.
+The middleware pipeline can be halted by any middleware who whishes to do so, by not calling `next_middleware`.
 
 Note that `res.status` is mandatory. Attempting to halt the pipeline without setting it will result in an error. If `res.status`
 is "valid" (for example, 200), then `res.body` must be set to a non-empty string.
@@ -84,13 +91,13 @@ The HTTP status code to return.
 There are [constants defined](http://wiki.nginx.org/HttpLuaModule#HTTP_status_constants) for common statuses.
 This value *must* be set by at least one middleware, otherwise the execution of `rack.run` will result in an error.
 
-### `res.header`
+### `res.headers`
 
 A table containing the request headers. Keys are matched case insensitvely, and optionally with underscores instead of hyphens. e.g.
 
 ```lua
-req.header["X-Foo"] = "bar"
-res.body = req.header.x_foo --> "bar"
+req.headers["X-Foo"] = "bar"
+res.body = req.headers.x_foo --> "bar"
 ```
 
 ### `res.body`

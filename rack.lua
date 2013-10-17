@@ -1,5 +1,7 @@
 local rack = {}
 
+local inspect = require 'inspect'
+
 rack._VERSION = '0.2'
 
 local function rack_assert(condition, message)
@@ -19,54 +21,38 @@ local function check_response(status, body)
   end
 end
 
-local function normalize(str)
-  return str:lower():gsub("-", "_")
-end
-
 local function copy(src, dest)
   dest = dest or {}
   for k,v in pairs(src) do dest[k] = v end
   return dest
 end
 
--- creates a metatable that, when applied to a table, makes it normalized, which means:
--- * It lowercases keys, so t.foo and t.FOO return the same
--- * It replaces dashes by underscores, so t['foo-bar'] returns the same as t.foo_bar
--- * When fallback is provided, t['inexisting key'] will return fallback('inexisting key')
--- It is used for immunizing ngx's to browser changes on the headers of requests and responses
-local function create_normalizer_mt(fallback)
-  local normalized = {}
-
-  return {
-    __index = function(t, k)
-      k = normalize(k)
-      return normalized[k] or (fallback and fallback(k))
-    end,
-
-    __newindex = function(t, k, v)
-      rawset(t, k, v)
-      normalized[normalize(k)] = v
-    end
-  }
+local function normalize(str)
+  return str:gsub("_", "-"):gsub("^%l", string.upper):gsub("-%l", string.upper)
 end
 
--- Fallback for the request's header, to be used on its normalizer mt
-local req_fallback  = function(k) return ngx.var["http_" .. k] end
+-- A metatable that, when applied to a table:
+-- * It titleizes keys, so t.foo and t.Foo return the same
+-- * It replaces underscores by dashes ant titleizes things, so t['Foo-Bar'] returns the same as t.foo_bar
+-- Internally, the keys are stored in Titled-Names format, not in underscored_names format. This makes it easier
+-- to go over the headers with a loop.
+local headers_mt = {
+  __index    = function(t, k) return rawget(t, normalize(k)) end,
+  __newindex = function(t, k, v) rawset(t, normalize(k), v) end
+}
 
 -- This metatable will fill the request body with its value the first time
 -- req.body is invoked. After that, it will be cached.
-local function create_bodybuilder_mt()
-  return {
-    __index = function(t, k)
-      if k == 'body' then
-        ngx.req.read_body()
-        local body = ngx.req.get_body_data()
-        rawset(t, 'body', body)
-        return body
-      end
+local bodybuilder_mt = {
+  __index = function(t, k)
+    if k == 'body' then
+      ngx.req.read_body()
+      local body = ngx.req.get_body_data()
+      rawset(t, 'body', body)
+      return body
     end
-  }
-end
+  end
+}
 
 local function create_initial_request()
   local query         = ngx.var.query_string or ""
@@ -75,28 +61,28 @@ local function create_initial_request()
   -- uri_full = http://example.com/test?arg=true
   local uri_full      = ngx.var.scheme .. '://' .. ngx.var.host .. uri_relative
 
-  local header       = copy(ngx.req.get_headers())
-  setmetatable(header, create_normalizer_mt(req_fallback))
+  local headers       = copy(ngx.req.get_headers(100, true))
+  setmetatable(headers, headers_mt)
 
   return setmetatable({
   --body = (provided by the bodybuilder metatable below)
     query         = query,
     uri_full      = uri_full,
     uri_relative  = uri_relative,
-    header        = header,
+    headers       = headers,
     method        = ngx.var.request_method,
     scheme        = ngx.var.scheme,
     uri           = ngx.var.uri,
     host          = ngx.var.host,
     args          = ngx.req.get_uri_args()
-  }, create_bodybuilder_mt())
+  }, bodybuilder_mt)
 end
 
 local function create_initial_response()
   return {
-    body    = nil,
-    status  = nil,
-    header  = setmetatable({}, create_normalizer_mt())
+    body     = nil,
+    status   = nil,
+    headers  = setmetatable({}, headers_mt)
   }
 end
 
@@ -113,20 +99,22 @@ function rack.run()
   local req = create_initial_request()
   local res = create_initial_response()
 
-  local mw, args
-  for i=1, #middlewares do
-    mw, args = middlewares[i].middleware, middlewares[i].args
-    if mw(req, res, unpack(args)) == false then break end
+  local function next_middleware()
+    local len = #middlewares
+    if len == 0 then return res end
+
+    local mw = table.remove(middlewares, 1)
+    return mw.middleware(req, next_middleware, unpack(mw.args))
   end
 
-  return res
+  return next_middleware()
 end
 
 function rack.respond(res)
   if not ngx.headers_sent then
     check_response(res.status, res.body)
 
-    copy(res.header, ngx.header)
+    copy(res.headers, ngx.header)
     ngx.status = res.status
     ngx.print(res.body)
     ngx.eof()
