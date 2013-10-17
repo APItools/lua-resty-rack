@@ -99,8 +99,8 @@ location /t {
         rack.use(function(req, next_middleware)
             -- interrupt by not calling next_middleware
             return {
-              status = 200,
-              body   = "Hello"
+              status  = 200,
+              body    = "Hello"
             }
         end)
         rack.use(function(req, next_middleware)
@@ -130,6 +130,8 @@ location /t {
           return res
         end
 
+        rack.use(replacer, "Hello", "Bye")
+
         rack.use(function(req, next_middleware)
           local res = next_middleware()
           res.status = 200
@@ -137,7 +139,6 @@ location /t {
           return res
         end)
 
-        rack.use(replacer, "Hello", "Bye")
 
         rack.respond(rack.run())
     ';

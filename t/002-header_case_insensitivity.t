@@ -19,17 +19,20 @@ location /t {
     content_by_lua '
         local rack = require "rack"
         local cjson = require "cjson"
-        rack.use(function(req, res)
+        rack.use(function(req, next_middleware)
+            local res = next_middleware()
+
             res.status = 200
             local r = {
-                req.header["X-Foo"],
-                req.header["x-foo"],
-                req.header["x-fOo"],
-                req.header["x_fOo"],
-                req.header.x_fOo,
-                req.header.X_Foo,
+                req.headers["X-Foo"],
+                req.headers["x-foo"],
+                req.headers["x-fOo"],
+                req.headers["x_fOo"],
+                req.headers.x_fOo,
+                req.headers.X_Foo,
             }
             res.body = cjson.encode(r)
+            return res
         end)
         rack.respond(rack.run())
     ';
@@ -47,18 +50,20 @@ location /t {
     content_by_lua '
         local rack = require "rack"
         local cjson = require "cjson"
-        rack.use(function(req, res)
+        rack.use(function(req, next_middleware)
+            local res = next_middleware()
             res.status = 200
-            res.header["X-Foo"] = "bar"
+            res.headers["X-Foo"] = "bar"
             local r = {
-                res.header["X-Foo"],
-                res.header["x-foo"],
-                res.header["x-fOo"],
-                res.header["x_fOo"],
-                res.header.x_fOo,
-                res.header.X_Foo,
+                res.headers["X-Foo"],
+                res.headers["x-foo"],
+                res.headers["x-fOo"],
+                res.headers["x_fOo"],
+                res.headers.x_fOo,
+                res.headers.X_Foo,
             }
             res.body = cjson.encode(r)
+            return res
         end)
         rack.respond(rack.run())
     ';
@@ -74,18 +79,20 @@ location /t {
     content_by_lua '
         local rack = require "rack"
         local cjson = require "cjson"
-        rack.use(function(req, res)
+        rack.use(function(req, next_middleware)
+            local res = next_middleware()
             res.status = 200
-            req.header["X-Foo"] = "bar"
+            req.headers["X-Foo"] = "bar"
             local r = {
-                req.header["X-Foo"],
-                req.header["x-foo"],
-                req.header["x-fOo"],
-                req.header["x_fOo"],
-                req.header.x_fOo,
-                req.header.X_Foo,
+                req.headers["X-Foo"],
+                req.headers["x-foo"],
+                req.headers["x-fOo"],
+                req.headers["x_fOo"],
+                req.headers.x_fOo,
+                req.headers.X_Foo,
             }
             res.body = cjson.encode(r)
+            return res
         end)
         rack.respond(rack.run())
     ';
@@ -101,10 +108,12 @@ location /t {
     content_by_lua '
         local rack = require "rack"
         local cjson = require "cjson"
-        rack.use(function(req, res)
+        rack.use(function(req, next_middleware)
+            local res = next_middleware()
             res.status = 200
-            res.header["X-Foo"] = "bar"
-            res.header["X-Foo"] = "bars"
+            res.headers["X-Foo"] = "bar"
+            res.headers.x_foo = "bars"
+            return res
         end)
         rack.respond(rack.run())
     ';

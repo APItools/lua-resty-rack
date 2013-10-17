@@ -28,7 +28,7 @@ local function copy(src, dest)
 end
 
 local function normalize(str)
-  return str:gsub("_", "-"):gsub("^%l", string.upper):gsub("-%l", string.upper)
+  return str:gsub("_", "-"):lower():gsub("^%l", string.upper):gsub("-%l", string.upper)
 end
 
 -- A metatable that, when applied to a table:
@@ -90,9 +90,9 @@ local middlewares = {}
 
 ----------------- PUBLIC INTERFACE ----------------------
 
-function rack.use(middleware, ...)
-  rack_assert(middleware, "Invalid middleware")
-  middlewares[#middlewares + 1] = { middleware = middleware, args = {...} }
+function rack.use(f, ...)
+  rack_assert(f, "Invalid middleware")
+  middlewares[#middlewares + 1] = { f = f, args = {...} }
 end
 
 function rack.run()
@@ -104,7 +104,7 @@ function rack.run()
     if len == 0 then return res end
 
     local mw = table.remove(middlewares, 1)
-    return mw.middleware(req, next_middleware, unpack(mw.args))
+    return mw.f(req, next_middleware, unpack(mw.args))
   end
 
   return next_middleware()
@@ -114,7 +114,7 @@ function rack.respond(res)
   if not ngx.headers_sent then
     check_response(res.status, res.body)
 
-    copy(res.headers, ngx.header)
+    copy(res.headers or {}, ngx.header)
     ngx.status = res.status
     ngx.print(res.body)
     ngx.eof()
