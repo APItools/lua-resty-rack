@@ -76,10 +76,19 @@ end
 
 local bodybuilder_index = function(t, k)
   if k == 'body' then
-    ngx.req.read_body()
-    local body = ngx.req.get_body_data()
-    rawset(t, 'body', body)
-    return body
+    local body_data = ngx.req.get_body_data() -- returns nil when no data, or too large (so it's in a file)
+    if not body_data then
+      local file = ngx.req.get_body_file() -- returns nil when no data, or not in file
+      if file then
+        local f, err = io.open(file, "r")
+        rack_assert(f, 'could not read request body file: ' .. err)
+        body_data = f:read("*a")
+        f:close()
+      end
+    end
+
+    rawset(t, 'body', body_data)
+    return body_data
   end
 end
 
