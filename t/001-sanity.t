@@ -18,7 +18,8 @@ __DATA__
 location /t {
     content_by_lua '
         local rack = require "rack"
-        rack.respond(rack.run())
+        local r    = rack.new()
+        r:respond(r:run({}))
     ';
 }
 --- request
@@ -31,13 +32,14 @@ GET /t
 location /t {
     content_by_lua '
         local rack = require "rack"
-        rack.use(function(req, next_middleware)
+        local r    = rack.new()
+        r:use(function(req, next_middleware)
             local res = next_middleware()
             res.status = 200
             res.body = "Hello"
             return res
         end)
-        rack.respond(rack.run())
+        r:respond(r:run({}))
     ';
 }
 --- request
@@ -51,12 +53,13 @@ GET /t
 location /t {
     content_by_lua '
         local rack = require "rack"
-        rack.use(function(req, next_middleware)
+        local r    = rack.new()
+        r:use(function(req, next_middleware)
             local res = next_middleware()
             res.status = 304
             return res
         end)
-        rack.respond(rack.run())
+        r:respond(r:run({}))
     ';
 }
 --- request
@@ -69,19 +72,20 @@ GET /t
 location /t {
     content_by_lua '
         local rack = require "rack"
+        local r    = rack.new()
 
-        rack.use(function(req, next_middleware)
+        r:use(function(req, next_middleware)
             local res = next_middleware()
             res.status = 200
             return res
         end)
-        rack.use(function(req, next_middleware)
+        r:use(function(req, next_middleware)
             local res = next_middleware()
             res.body = "Hello"
             return res
         end)
 
-        rack.respond(rack.run())
+        r:respond(r:run({}))
     ';
 }
 --- request
@@ -95,21 +99,22 @@ GET /t
 location /t {
     content_by_lua '
         local rack = require "rack"
+        local r    = rack.new()
 
-        rack.use(function(req, next_middleware)
+        r:use(function(req, next_middleware)
             -- interrupt by not calling next_middleware
             return {
               status  = 200,
               body    = "Hello"
             }
         end)
-        rack.use(function(req, next_middleware)
+        r:use(function(req, next_middleware)
             local res = next_middleware()
             res.body = "Goodbye"
             return res
         end)
 
-        rack.respond(rack.run())
+        r:respond(r:run({}))
     ';
 }
 --- request
@@ -123,6 +128,7 @@ GET /t
 location /t {
     content_by_lua '
         local rack = require "rack"
+        local r    = rack.new()
 
         local replacer = function(req, next_middleware, from, to)
           local res = next_middleware()
@@ -130,17 +136,16 @@ location /t {
           return res
         end
 
-        rack.use(replacer, "Hello", "Bye")
+        r:use(replacer, "Hello", "Bye")
 
-        rack.use(function(req, next_middleware)
+        r:use(function(req, next_middleware)
           local res = next_middleware()
           res.status = 200
           res.body = "Hello World"
           return res
         end)
 
-
-        rack.respond(rack.run())
+        r:respond(r:run({}))
     ';
 }
 --- request

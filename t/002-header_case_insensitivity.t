@@ -1,7 +1,7 @@
 use Test::Nginx::Socket;
 use Cwd qw(cwd);
 
-plan tests => 8;
+plan tests => 6;
 
 my $pwd = cwd();
 
@@ -12,29 +12,32 @@ our $HttpConfig = qq{
 run_tests();
 
 __DATA__
-=== TEST 1: Req headers from HTTP, all cases.
+=== TEST 1: Res headers from HTTP, all cases.
 --- http_config eval: $::HttpConfig
 --- config
 location /t {
     content_by_lua '
-        local rack = require "rack"
+        local rack  = require "rack"
         local cjson = require "cjson"
-        rack.use(function(req, next_middleware)
+        local r     = rack.new()
+        r:use(function(req, next_middleware)
             local res = next_middleware()
+
+            res.headers.x_foo = "bar"
 
             res.status = 200
             local r = {
-                req.headers["X-Foo"],
-                req.headers["x-foo"],
-                req.headers["x-fOo"],
-                req.headers["x_fOo"],
-                req.headers.x_fOo,
-                req.headers.X_Foo,
+                res.headers["X-Foo"],
+                res.headers["x-foo"],
+                res.headers["x-fOo"],
+                res.headers["x_fOo"],
+                res.headers.x_fOo,
+                res.headers.X_Foo,
             }
             res.body = cjson.encode(r)
             return res
         end)
-        rack.respond(rack.run())
+        r:respond(r:run({}))
     ';
 }
 --- more_headers
@@ -43,14 +46,15 @@ X-Foo: bar
 GET /t
 --- response_body: ["bar","bar","bar","bar","bar","bar"]
 
-=== TEST 2: Res headers, all cases.
+=== TEST 2: Res headers, defined in code.
 --- http_config eval: $::HttpConfig
 --- config
 location /t {
     content_by_lua '
-        local rack = require "rack"
+        local rack  = require "rack"
         local cjson = require "cjson"
-        rack.use(function(req, next_middleware)
+        local r     = rack.new()
+        r:use(function(req, next_middleware)
             local res = next_middleware()
             res.status = 200
             res.headers["X-Foo"] = "bar"
@@ -65,57 +69,29 @@ location /t {
             res.body = cjson.encode(r)
             return res
         end)
-        rack.respond(rack.run())
+        r:respond(r:run({}))
     ';
 }
 --- request
 GET /t
 --- response_body: ["bar","bar","bar","bar","bar","bar"]
 
-=== TEST 3: Req headers, defined in code.
+=== TEST 3: Change res headers (tests metatables)
 --- http_config eval: $::HttpConfig
 --- config
 location /t {
     content_by_lua '
-        local rack = require "rack"
+        local rack  = require "rack"
         local cjson = require "cjson"
-        rack.use(function(req, next_middleware)
-            local res = next_middleware()
-            res.status = 200
-            req.headers["X-Foo"] = "bar"
-            local r = {
-                req.headers["X-Foo"],
-                req.headers["x-foo"],
-                req.headers["x-fOo"],
-                req.headers["x_fOo"],
-                req.headers.x_fOo,
-                req.headers.X_Foo,
-            }
-            res.body = cjson.encode(r)
-            return res
-        end)
-        rack.respond(rack.run())
-    ';
-}
---- request
-GET /t
---- response_body: ["bar","bar","bar","bar","bar","bar"]
-
-=== TEST 4: Change res headers (tests metatables)
---- http_config eval: $::HttpConfig
---- config
-location /t {
-    content_by_lua '
-        local rack = require "rack"
-        local cjson = require "cjson"
-        rack.use(function(req, next_middleware)
+        local r     = rack.new()
+        r:use(function(req, next_middleware)
             local res = next_middleware()
             res.status = 200
             res.headers["X-Foo"] = "bar"
             res.headers.x_foo = "bars"
             return res
         end)
-        rack.respond(rack.run())
+        r:respond(r:run({}))
     ';
 }
 --- request
