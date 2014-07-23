@@ -12,7 +12,7 @@ This library is considered experimental and the API may change without notice. P
 
 Copy the `rack.lua` file inside your nginx's `lib` folder and make sure it is included in the `lua_package_path` variable in `nginx.conf`.
 
-## Using Middleware
+## Quick example
 
 To install middleware for a given `location`, you simply call `rack.use(middleware)` in the order you wish the modules to run, and then finally call `rack.run()`.
 
@@ -21,16 +21,30 @@ server {
   location / {
     content_by_lua '
       local rack = require "rack"
+      local r    = rack.new()
 
-      rack.use(require "my.middleware")
-      local response = rack.run()
-      rack.respond(response)
+      r:use(require "my.middleware")
+      local response = r:run()
+      r:respond(response)
     ';
   }
 }
 ```
 
-### `rack.use(middleware, ...)`
+## Methods
+
+```lua
+local rack = require 'rack'
+local r    = rack.new()
+```
+
+This is how you create a `rack` *instance*. The rest of the methods in rack require instances.
+
+```lua
+r:use(middleware, ...)
+```
+
+`r` is a rack instance created with `rack.new()`.
 
 The `middleware` parameter must be a callable object (usually a Lua function).
 
@@ -40,12 +54,12 @@ will return a `res` (response) object.
 All middleware functions should at least return a response. It is recommended to use `res`.
 
 ```lua
-rack.use(function(req, next_middleware)
+r:use(function(req, next_middleware)
   res.headers["X-Homer"] = "D'oh!"
   return next_middleware()
 end)
 ```
-Any extra arguments passed to `rack.use` will be passed to the middleware after `req` and `res`.
+Any extra arguments passed to `r:use` will be passed to the middleware after `req` and `res`.
 
 ```lua
 local replacer_mw = function(req,next_middleare,from,to)
@@ -54,34 +68,75 @@ local replacer_mw = function(req,next_middleare,from,to)
   return res
 end
 
-rack.use(function(req, next_middleware)
+r:use(function(req, next_middleware)
   local res = next_middleware()
   res.status = 200
   res.body   = "I like Chocolate"
   return res
 end)
 
-rack.use(body_replacer, "Chocolate", "Vanilla")
+r:use(body_replacer, "Chocolate", "Vanilla")
 ```
 
-It's possible to chain more than one middleware by calling `rack.use` several times.
-The middlewares will be executed in the same order they are included by `rack.use`. They can
+It's possible to chain more than one middleware by calling `r:use` several times.
+The middlewares will be executed in the same order they are included by `r:use`. They can
 modify `req` and `res` by changing their properties or adding new ones. It is required that
-at least `res.status` is set by some middleware.
+at least `res.status` is set to something by at at least one of the middlewares.
 
-### `local response = rack.run()`
+``` lua
+local response = r:run([req])
+```
 
-Runs each of the middlewares in order, until the list is finished or one of the middlewares stops the pipeline (see below).
+`r` is a rack instance created with `rack.new()`.
 
-Middlewares will be executed in the same order as they were included by `rack.use()`.
+When the optional parameter `req` is specified, it is used as the request. If no request is specified, a default request will be created using
+`r:create_initial_request()`.
+
+`r:run()` executes each of the middlewares in order, until the list is finished or one of the middlewares stops the pipeline (see below).
+
+`response` is the result of applying all the middlewares in order to the initial response (which has the values listed below).
+
+Middlewares will be executed in the same order as they were included by `r:use()`.
 
 Each middleware can make modifications to `req` and `res`, and the next middleware will receive them (`res` must be returned).
-The rest of parameters are optional and will be the same ones provided in `rack.use`.
+The rest of parameters are optional and will be the same ones provided in `r:use()`.
 
 The middleware pipeline can be halted by any middleware who whishes to do so, by not calling `next_middleware`.
 
 Note that `res.status` is mandatory. Attempting to halt the pipeline without setting it will result in an error. If `res.status`
 is "valid" (for example, 200), then `res.body` must be set to a non-empty string.
+
+```lua
+local req = r:create_initial_request()
+```
+
+`r` is a rack instance created with `rack.new()`.
+
+`req` is a table with the properties defined below, in the `req` section.
+
+If no request object is passed to `r:run()`, it will create one using `r:create_initial_request()`.
+
+
+```lua
+r:respond(response)
+```
+
+Sends the response to the server. Usually `response` was returned by `r:run`.
+
+`r:run` and `r:respond` are separated so that further actions can be done in
+the server after running the middlewares but before sending the response back (for
+example, handling errors or storing the final response on a database). If no such
+treatment is needed, the following one-liner can be used:
+
+```lua
+r:respond(r:run())
+```
+
+Or, if you want to use your own request,
+
+```lua
+r:respond(r:run(my_request))
+```
 
 ## `res` attributes
 
@@ -89,7 +144,7 @@ is "valid" (for example, 200), then `res.body` must be set to a non-empty string
 
 The HTTP status code to return.
 There are [constants defined](http://wiki.nginx.org/HttpLuaModule#HTTP_status_constants) for common statuses.
-This value *must* be set by at least one middleware, otherwise the execution of `rack.run` will result in an error.
+This value *must* be set by at least one middleware, otherwise the execution of `r:run` will result in an error.
 
 ### `res.headers`
 
@@ -105,6 +160,8 @@ res.body = req.headers.x_foo --> "bar"
 The response body. It's initially empty, and will be returned by nginx as response after the last middleware in the chain has been executed.
 
 ## `req` attributes
+
+Note that if you pass your own `req` parameter to `r:run`, the following will not be valid (whatever you pass will be used as a parameter)
 
 ### `req.method`
 
@@ -139,16 +196,7 @@ A table of headers. Just like in `res.header`, keys are normalized before being 
 The request body. It's loaded automatically (via metatables) the first time it's requested, since it's an expensive operation. Then it is
 cached. It can also be set to anything else by any middleware.
 
-## `rack.respond(response)`
 
-Sends the response to the server. Usually `response` was returned by `rack.run`.
-
-`rack.run` and `rack.respond` are separated so that further actions can be done in
-the server after running the middlewares but before sending the response back (for
-example, handling errors or storing the final response on a database). If no such
-treatment is needed, the following one-liner can be used:
-
-    rack.respond(rack.run())
 
 ## Tests
 
