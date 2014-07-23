@@ -11,8 +11,9 @@ our $HttpConfig = qq{
 
 run_tests();
 
+
 __DATA__
-=== TEST 1: Res headers from HTTP, all cases.
+=== TEST 1: Req headers from HTTP, all cases.
 --- http_config eval: $::HttpConfig
 --- config
 location /t {
@@ -23,21 +24,19 @@ location /t {
         r:use(function(req, next_middleware)
             local res = next_middleware()
 
-            res.headers.x_foo = "bar"
-
             res.status = 200
             local r = {
-                res.headers["X-Foo"],
-                res.headers["x-foo"],
-                res.headers["x-fOo"],
-                res.headers["x_fOo"],
-                res.headers.x_fOo,
-                res.headers.X_Foo,
+                req.headers["X-Foo"],
+                req.headers["x-foo"],
+                req.headers["x-fOo"],
+                req.headers["x_fOo"],
+                req.headers.x_fOo,
+                req.headers.X_Foo,
             }
             res.body = cjson.encode(r)
             return res
         end)
-        r:respond(r:run({}))
+        r:respond(r:run())
     ';
 }
 --- more_headers
@@ -69,7 +68,7 @@ location /t {
             res.body = cjson.encode(r)
             return res
         end)
-        r:respond(r:run({}))
+        r:respond(r:run())
     ';
 }
 --- request
@@ -91,7 +90,7 @@ location /t {
             res.headers.x_foo = "bars"
             return res
         end)
-        r:respond(r:run({}))
+        r:respond(r:run())
     ';
 }
 --- request

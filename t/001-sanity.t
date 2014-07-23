@@ -19,7 +19,7 @@ location /t {
     content_by_lua '
         local rack = require "rack"
         local r    = rack.new()
-        r:respond(r:run({}))
+        r:respond(r:run())
     ';
 }
 --- request
@@ -39,7 +39,7 @@ location /t {
             res.body = "Hello"
             return res
         end)
-        r:respond(r:run({}))
+        r:respond(r:run())
     ';
 }
 --- request
@@ -59,7 +59,7 @@ location /t {
             res.status = 304
             return res
         end)
-        r:respond(r:run({}))
+        r:respond(r:run())
     ';
 }
 --- request
@@ -85,7 +85,7 @@ location /t {
             return res
         end)
 
-        r:respond(r:run({}))
+        r:respond(r:run())
     ';
 }
 --- request
@@ -114,7 +114,7 @@ location /t {
             return res
         end)
 
-        r:respond(r:run({}))
+        r:respond(r:run())
     ';
 }
 --- request
@@ -145,7 +145,7 @@ location /t {
           return res
         end)
 
-        r:respond(r:run({}))
+        r:respond(r:run())
     ';
 }
 --- request

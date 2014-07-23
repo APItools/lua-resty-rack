@@ -43,14 +43,15 @@ end
 local headers_index    = function(t, k) return rawget(t, normalize(k)) end
 local headers_newindex = function(t, k, v) rawset(t, normalize(k), v) end
 
-local function create_initial_response()
-  -- create a new mt for each response, so they can carry info
-  local headers_mt = { __index = headers_index, __newindex = headers_newindex }
+local create_headers_mt = function()
+  return { __index = headers_index, __newindex = headers_newindex }
+end
 
+local function create_initial_response()
   return {
     body     = nil,
     status   = nil,
-    headers  = setmetatable({}, headers_mt)
+    headers  = setmetatable({}, create_headers_mt())
   }
 end
 
@@ -62,6 +63,7 @@ function rack:use(f, ...)
 end
 
 function rack:run(req)
+  req = req or self:create_initial_request()
   local res = create_initial_response()
 
   local function next_middleware()
@@ -88,6 +90,33 @@ function rack:respond(res)
     ngx.print(res.body)
     ngx.eof()
   end
+end
+
+function rack:create_initial_request()
+  local query  = ngx.var.query_string or ""
+  local scheme = ngx.var.scheme
+  local host   = ngx.var.host
+
+  local uri = ngx.var.request_uri:gsub('%?.*', '')
+  -- uri_relative = /test?arg=true
+  local uri_relative  = uri .. ngx.var.is_args .. query
+  -- uri_full = http://example.com/test?arg=true
+  local uri_full      =  scheme .. '://' ..  host .. uri_relative
+
+  local headers = copy(ngx.req.get_headers(100, true))
+  setmetatable(headers, create_headers_mt())
+
+  return {
+    query         = query,
+    headers       = headers,
+    uri_full      = uri_full,
+    uri_relative  = uri_relative,
+    args          = ngx.req.get_uri_args(),
+    method        = ngx.var.request_method,
+    scheme        = scheme,
+    uri           = uri,
+    host          = host
+  }
 end
 
 function rack.reset()
