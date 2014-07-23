@@ -1,12 +1,39 @@
-local rack = {}
+local rack = {
+  _VERSION     = 'lua-resty-rack 0.3',
+  _DESCRIPTION = 'rack for openresty',
+  _URL         = 'https://github.com/APItools/lua-resty-rack',
+  _LICENSE     = [[
+    2-clause BSD-LICENSE
 
-local inspect = require 'inspect'
+    This module is licensed under the 2-clause BSD license.
 
-rack._VERSION = '0.2'
+    * Copyright (c) 2012, James Hurst (james@pintsized.co.uk)
+    * Copyright (c) 2013, Raimon Grau (raimonster@gmail.com)
+    * Copyright (c) 2013, Enrique García (kikito@gmail.com)
 
-function rack.new()
-  return setmetatable({middlewares = {}}, { __index = rack })
-end
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without modification,
+    are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright notice,
+      this list of conditions and the following disclaimer in the documentation and/or
+      other materials provided with the distribution.
+
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+    IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+    BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+    DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+    LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+    OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+    OF THE POSSIBILITY OF SUCH DAMAGE.
+  ]]
+}
 
 local function rack_assert(condition, message)
   if not condition then
@@ -47,6 +74,15 @@ local create_headers_mt = function()
   return { __index = headers_index, __newindex = headers_newindex }
 end
 
+local bodybuilder_index = function(t, k)
+  if k == 'body' then
+    ngx.req.read_body()
+    local body = ngx.req.get_body_data()
+    rawset(t, 'body', body)
+    return body
+  end
+end
+
 local function create_initial_response()
   return {
     body     = nil,
@@ -55,14 +91,16 @@ local function create_initial_response()
   }
 end
 
+local Rack = {}
+
 ----------------- PUBLIC INTERFACE ----------------------
 
-function rack:use(f, ...)
+function Rack:use(f, ...)
   rack_assert(f, "Invalid middleware")
   self.middlewares[#(self.middlewares) + 1] = { f = f, args = {...} }
 end
 
-function rack:run(req)
+function Rack:run(req)
   req = req or self:create_initial_request()
   local res = create_initial_response()
 
@@ -81,7 +119,7 @@ function rack:run(req)
   return next_middleware()
 end
 
-function rack:respond(res)
+function Rack:respond(res)
   if not ngx.headers_sent then
     check_response(res.status, res.body)
 
@@ -92,7 +130,7 @@ function rack:respond(res)
   end
 end
 
-function rack:create_initial_request()
+function Rack:create_initial_request()
   local query  = ngx.var.query_string or ""
   local scheme = ngx.var.scheme
   local host   = ngx.var.host
@@ -106,7 +144,9 @@ function rack:create_initial_request()
   local headers = copy(ngx.req.get_headers(100, true))
   setmetatable(headers, create_headers_mt())
 
-  return {
+  local bodybuilder_mt = {__index = bodybuilder_index }
+
+  return setmetatable({
     query         = query,
     headers       = headers,
     uri_full      = uri_full,
@@ -116,11 +156,11 @@ function rack:create_initial_request()
     scheme        = scheme,
     uri           = uri,
     host          = host
-  }
+  }, bodybuilder_mt)
 end
 
-function rack.reset()
-  self.middlewares = {}
+function rack.new()
+  return setmetatable({middlewares = {}}, {__index = Rack})
 end
 
 return rack
